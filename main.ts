@@ -1,23 +1,46 @@
-import ollama, { Message } from 'ollama'
+import ollama, { Message } from 'ollama';
+import { Character, dammon, generalPrompt, karlach, MessageLogEntry, scenario } from './prompts.ts';
 
-const targetModel = 'qwen2.5';
-
-const userPrompt = prompt('>');
-
-if (userPrompt == null) {
-  console.log('Bye!');
-  Deno.exit(0);
-}
-
-const message: Message = {
-  role: 'user',
-  content: userPrompt,
-};
-
-const response = await ollama.chat({
-  model: targetModel,
-  messages: [message],
-});
+const targetModel = 'qwen3'; // thinking model
 
 const textEncoder = new TextEncoder();
-Deno.stdout.write(textEncoder.encode(response.message.content));
+
+const prompt = (history: string): Message => ({
+  role: 'user',
+  content: `${history} ${scenario} ${generalPrompt}`,
+});
+
+const log: MessageLogEntry[] = [];
+
+const chatHistory = (character: Character): string =>
+  log.map(l => l.character === character.name ?
+    `${l.thinking} ${l.public}` :
+    `${l.character} says: ${l.public}`)
+    .join('\n');
+
+const print = (entry: MessageLogEntry) => {
+  Deno.stdout.write(textEncoder.encode(`###########
+## ${entry.character}:
+${entry.thinking}
+--
+${entry.public}\n`));
+}
+
+const action = async (character: Character) => {
+  const response = await ollama.chat({
+    model: targetModel,
+    messages: [prompt(chatHistory(character))],
+    think: true,
+  });
+
+  const entry: MessageLogEntry = {
+    character: character.name,
+    thinking: response.message.thinking,
+    public: response.message.content,
+  };
+  log.push(entry);
+  print(entry);
+}
+
+await action(karlach);
+await action(dammon);
